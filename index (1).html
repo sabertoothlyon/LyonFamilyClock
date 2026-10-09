@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0704">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Family Clock">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23b98a35'/%3E%3Ccircle cx='32' cy='32' r='25' fill='%232a170b'/%3E%3Cpath d='M32 32 L32 12 M32 32 L46 40' stroke='%23f3d890' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Family Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#d9b25f;--gold-d:#8a6a2c;--ink:#f3e3b8}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 30%,#2b1a0e,#0d0704 75%);color:var(--ink);font-family:Cinzel,"Palatino Linotype",Palatino,Georgia,serif;overflow:hidden}
+body.idle{cursor:none}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:2vmin;height:100vh;height:100dvh;padding:calc(1.5vmin + env(safe-area-inset-top)) calc(1.5vmin + env(safe-area-inset-right)) calc(1.5vmin + env(safe-area-inset-bottom)) calc(1.5vmin + env(safe-area-inset-left));align-items:center}
+#clock{width:100%;height:100%;max-height:97vh;display:block}
+.legend{background:rgba(20,10,5,.55);border:1px solid var(--gold-d);border-radius:14px;padding:14px 16px}
+.legend h1{margin:0 0 10px;font-size:1.05rem;letter-spacing:.12em;color:var(--gold);text-align:center;text-transform:uppercase}
+.legend ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.legend li{display:grid;grid-template-columns:14px 1fr;gap:0 10px;align-items:center}
+.sw{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--gold);grid-row:span 2}
+.nm{font-weight:700;font-size:.95rem}
+.lc{font-size:.8rem;opacity:.85}
+.lc.peril{color:#ff7468;font-weight:700}
+.bar{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.7rem}
+#status{flex:1 1 100%;opacity:.75}
+#status.bad{color:#ffb15c}
+button{font:inherit;font-size:.7rem;color:var(--ink);background:rgba(217,178,95,.15);border:1px solid var(--gold-d);border-radius:8px;padding:5px 10px;cursor:pointer}
+button:hover{background:rgba(217,178,95,.3)}
+.sl{fill:#e9d49b;font-size:21px;letter-spacing:.06em;font-family:inherit}
+.sl.pl{fill:#ff8a7e}
+.sct path{fill:rgba(217,178,95,.12);stroke:#8a6a2c;stroke-width:1.5;transition:fill .6s}
+.sct.alt path{fill:rgba(217,178,95,.2)}
+.sct.occ path{fill:rgba(217,178,95,.42)}
+.sct.occ .sl{fill:#fff;font-weight:700}
+.tw{animation:tw 3.5s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.15}50%{opacity:.85}}
+.ready .mrot{transition:transform 3.4s cubic-bezier(.5,0,.2,1)}
+.ready .hs{transition:transform .3s cubic-bezier(.4,2.3,.5,1)}
+.ready .hm,.ready .hh{transition:transform .5s ease-out}
+@keyframes shk{0%,100%{transform:rotate(-2.2deg)}50%{transform:rotate(2.2deg)}}
+.peril .shk{animation:shk .11s infinite}
+@media (orientation:portrait){
+  html,body{overflow-y:auto}
+  .wrap{grid-template-columns:1fr;grid-template-rows:auto auto;height:auto;min-height:100dvh;align-content:start}
+  #clock{height:auto;aspect-ratio:1/1;max-height:none}
+  .legend ul{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <svg id="clock" viewBox="0 0 1000 1000" role="img" aria-label="Family location clock"></svg>
+  <aside class="legend">
+    <h1>The Family Clock</h1>
+    <ul id="legend"></ul>
+    <div class="bar">
+      <span id="status">Starting...</span>
+      <button id="snd" type="button">Tick sound: off</button>
+      <button id="fs" type="button">Fullscreen</button>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* =====================================================================
+   CONFIG  (edit this block)
+   ---------------------------------------------------------------------
+   GOOGLE SHEET SETUP
+   1. Sheet columns:  A = Name (must match a name below), B = Location or activity
+        Name    | Location
+        Arthur  | Work
+        Molly   | at the grocery store
+   2. File > Share > Publish to web > pick the sheet tab > CSV > Publish.
+   3. Paste the CSV link into SHEET_CSV_URL (or open this page with ?sheet=LINK).
+   Leave SHEET_CSV_URL empty to run in DEMO mode (hands wander on their own).
+   Location text is matched against LOCATIONS names first, then keywords.
+   Anything unrecognised lands on "Elsewhere".
+   ===================================================================== */
+const CONFIG = {
+  SHEET_CSV_URL: "",
+  REFRESH_SECONDS: 30,
+  FAMILY: [
+    { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a" },
+    { name: "Stacey",  role: "Mom", short: "S",  color: "#f2a33a" },
+    { name: "Andrew",  short: "A",  color: "#f6d55c" },
+    { name: "Heidi",   short: "Hd", color: "#8fd16a" },
+    { name: "Tanner",  short: "T",  color: "#4fc3b0" },
+    { name: "Brenden", short: "B",  color: "#5aa9f0" },
+    { name: "Heather", short: "Hr", color: "#8e7cf0" },
+    { name: "Heath",   short: "Ht", color: "#e27bd0" },
+    { name: "Jesse",   short: "Je", color: "#f0efe6" },
+    { name: "Rylee",   short: "R",  color: "#c9a27a" }
+  ],
+  /* Order = clockwise from the top. Exactly 10 sectors. */
+  LOCATIONS: [
+    { name: "Home",         keys: ["home", "house"] },
+    { name: "Work",         keys: ["work", "office", "job", "shift", "meeting"] },
+    { name: "School",       keys: ["school", "class", "college", "campus", "practice", "lesson"] },
+    { name: "Traveling",    keys: ["travel", "driving", "commut", "flight", "airport", "road", "bus", "train", "on the way"] },
+    { name: "Gym",          keys: ["gym", "workout", "run", "surf", "hike", "beach", "sport", "swim"] },
+    { name: "Church",       keys: ["church", "temple", "service", "prayer"] },
+    { name: "Shopping",     keys: ["shop", "store", "market", "errand", "grocer", "mall"] },
+    { name: "Visiting",     keys: ["visit", "friend", "party", "dinner", "grandma", "grandpa", "cousin"] },
+    { name: "Elsewhere",    keys: [] },
+    { name: "Mortal Peril", keys: ["peril", "danger", "emergency", "sos", "hospital", "help"] }
+  ]
+};
+
+/* ---------------------------------------------------------------- */
+const params = new URLSearchParams(location.search);
+/* Sheet link: open the page once with ?sheet=LINK (put it last in the address).
+   It is saved on that device and removed from the address bar, so the public
+   page source never holds it. Use ?sheet=clear to forget it. */
+function readSheetParam() {
+  const q = location.search.replace(/^\?/, "");
+  const i = q.indexOf("sheet=");
+  if (i < 0) return null;
+  let v = q.slice(i + 6);
+  try { if (/^https?%3A/i.test(v)) v = decodeURIComponent(v); } catch (e) {}
+  return v;
+}
+let SHEET_URL = CONFIG.SHEET_CSV_URL;
+{
+  const p = readSheetParam();
+  try {
+    if (p === "clear") localStorage.removeItem("family-clock-sheet");
+    else if (p) localStorage.setItem("family-clock-sheet", p);
+    if (p) history.replaceState(null, "", location.pathname);
+    SHEET_URL = localStorage.getItem("family-clock-sheet") || CONFIG.SHEET_CSV_URL;
+  } catch (e) {
+    if (p && p !== "clear") SHEET_URL = p;
+  }
+}
+const FORCE_DEMO = params.has("demo");
+const FAMILY = CONFIG.FAMILY, LOCS = CONFIG.LOCATIONS, N = LOCS.length;
+const ELSE = LOCS.findIndex(l => l.name === "Elsewhere");
+const PERIL = LOCS.findIndex(l => l.name === "Mortal Peril");
+const SVGNS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("clock");
+
+function s(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in (attrs || {})) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function pol(r, a) { const t = a * Math.PI / 180; return [r * Math.sin(t), -r * Math.cos(t)]; }
+function setA(el, target) {
+  const cur = el._a === undefined ? target : el._a;
+  const diff = (((target - cur) % 360) + 540) % 360 - 180;
+  el._a = cur + diff;
+  el.style.transform = "rotate(" + el._a + "deg)";
+}
+
+/* ---------- static artwork ---------- */
+svg.innerHTML = `
+<defs>
+  <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4d2c15"/><stop offset=".5" stop-color="#2a170b"/><stop offset="1" stop-color="#3d2312"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#f3d890"/><stop offset=".5" stop-color="#b98a35"/><stop offset="1" stop-color="#e2bd69"/>
+  </linearGradient>
+  <radialGradient id="face" cx=".5" cy=".45" r=".6">
+    <stop offset="0" stop-color="#3b2314"/><stop offset="1" stop-color="#1a0e07"/>
+  </radialGradient>
+  <radialGradient id="ivory" cx=".5" cy=".45" r=".6">
+    <stop offset="0" stop-color="#fbf1d6"/><stop offset="1" stop-color="#dcc79a"/>
+  </radialGradient>
+</defs>
+<rect x="30" y="8" width="940" height="984" rx="70" fill="url(#wood)" stroke="url(#gold)" stroke-width="6"/>
+<rect x="50" y="28" width="900" height="944" rx="54" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="3"/>
+<g id="dial" transform="translate(500,600)">
+  <circle r="392" fill="url(#gold)"/>
+  <circle r="380" fill="url(#face)"/>
+  <g id="sectors"></g>
+  <circle r="282" fill="none" stroke="#d9b25f" stroke-width="3"/>
+  <circle r="366" fill="none" stroke="#d9b25f" stroke-width="2"/>
+  <g id="stars"></g>
+  <g id="hands"></g>
+  <circle r="17" fill="url(#gold)" stroke="#2a170b" stroke-width="3"/>
+  <circle r="6" fill="#2a170b"/>
+</g>
+<g id="crown" transform="translate(500,118)" style="cursor:pointer">
+  <circle r="104" fill="url(#gold)"/>
+  <circle r="96" fill="#2a170b"/>
+  <circle r="90" fill="url(#ivory)"/>
+  <g id="ticks"></g>
+  <g id="timehands">
+    <g class="hh"><path d="M0,-48 L-5.5,-8 L0,10 L5.5,-8 Z" fill="#2a170b"/></g>
+    <g class="hm"><path d="M0,-76 L-3.6,-8 L0,10 L3.6,-8 Z" fill="#2a170b"/></g>
+    <g class="hs"><line x1="0" y1="18" x2="0" y2="-80" stroke="#b3261e" stroke-width="1.8"/><circle cy="-58" r="3.6" fill="#b3261e"/></g>
+  </g>
+  <circle r="6" fill="#b3261e"/><circle r="2.2" fill="#2a170b"/>
+</g>`;
+
+const gSectors = svg.querySelector("#sectors");
+const gStars = svg.querySelector("#stars");
+const gHands = svg.querySelector("#hands");
+const gTicks = svg.querySelector("#ticks");
+
+/* crown ticks + numerals */
+for (let i = 0; i < 60; i++) {
+  const a = i * 6, big = i % 5 === 0;
+  const [x1, y1] = pol(84, a), [x2, y2] = pol(big ? 72 : 79, a);
+  s("line", { x1, y1, x2, y2, stroke: "#3a2412", "stroke-width": big ? 3 : 1 }, gTicks);
+}
+[[12, 0], [3, 90], [6, 180], [9, 270]].forEach(([n, a]) => {
+  const [x, y] = pol(58, a);
+  const t = s("text", { x, y, "text-anchor": "middle", "dominant-baseline": "central", fill: "#3a2412", "font-size": 19, "font-family": "Cinzel, Georgia, serif", "font-weight": 700 }, gTicks);
+  t.textContent = n;
+});
+
+/* sectors */
+const sectorEls = [];
+LOCS.forEach((loc, i) => {
+  const a = i * 36, a0 = a - 18, a1 = a + 18;
+  const [x0, y0] = pol(366, a0), [x1, y1] = pol(366, a1), [x2, y2] = pol(282, a1), [x3, y3] = pol(282, a0);
+  const g = s("g", { class: "sct" + (i % 2 ? " alt" : "") }, gSectors);
+  s("path", { d: `M${x0},${y0} A366,366 0 0 1 ${x1},${y1} L${x2},${y2} A282,282 0 0 0 ${x3},${y3} Z` }, g);
+  const [lx, ly] = pol(324, a);
+  const flip = a > 90 && a < 270;
+  const lg = s("g", { transform: `translate(${lx},${ly}) rotate(${flip ? a + 180 : a})` }, g);
+  const t = s("text", { class: "sl" + (i === PERIL ? " pl" : ""), "text-anchor": "middle", "dominant-baseline": "central" }, lg);
+  t.textContent = loc.name;
+  sectorEls.push(g);
+});
+
+/* twinkling stars */
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 38; i++) {
+  const r = 30 + rnd() * 235, a = rnd() * 360, [x, y] = pol(r, a);
+  const c = s("circle", { cx: x, cy: y, r: 0.8 + rnd() * 1.8, fill: "#f3d890", class: "tw" }, gStars);
+  c.style.animationDelay = (rnd() * 3.5) + "s";
+}
+
+/* family hands */
+const hands = FAMILY.map((m, i) => {
+  const L = 150 + i * 13;
+  const g = s("g", {}, gHands);
+  const rot = s("g", { class: "mrot" }, g);
+  const shk = s("g", { class: "shk" }, rot);
+  s("line", { x1: 0, y1: 26, x2: 0, y2: -(L - 24), stroke: "#120a05", "stroke-width": 9, "stroke-linecap": "round" }, shk);
+  s("line", { x1: 0, y1: 26, x2: 0, y2: -(L - 24), stroke: m.color, "stroke-width": 4.5, "stroke-linecap": "round" }, shk);
+  s("polygon", { points: `0,${-L} -13,${-(L - 34)} 13,${-(L - 34)}`, fill: m.color, stroke: "#120a05", "stroke-width": 2, "stroke-linejoin": "round" }, shk);
+  const lp = s("g", { transform: `translate(0,${-(L - 64)})` }, shk);
+  const lab = s("g", { class: "mrot" }, lp);
+  s("circle", { r: 18, fill: m.color, stroke: "#d9b25f", "stroke-width": 2.2 }, lab);
+  const t = s("text", { "text-anchor": "middle", "dominant-baseline": "central", fill: "#1a0f08", "font-size": (m.short || m.name[0]).length > 1 ? 14 : 18, "font-weight": 700, "font-family": "Cinzel, Georgia, serif" }, lab);
+  t.textContent = m.short || m.name[0];
+  return { g, rot, lab };
+});
+
+/* legend */
+const legend = document.getElementById("legend");
+const legendLoc = FAMILY.map(m => {
+  const li = document.createElement("li");
+  li.innerHTML = '<span class="sw"></span><span class="nm"></span><span class="lc"></span>';
+  li.querySelector(".sw").style.background = m.color;
+  li.querySelector(".nm").textContent = m.name + (m.role ? " (" + m.role + ")" : "");
+  legend.appendChild(li);
+  return li.querySelector(".lc");
+});
+
+/* ---------- state + rendering ---------- */
+const state = {};
+try { Object.assign(state, JSON.parse(localStorage.getItem("family-clock-state") || "{}")); } catch (e) {}
+const save = () => { try { localStorage.setItem("family-clock-state", JSON.stringify(state)); } catch (e) {} };
+
+function matchLoc(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return ELSE;
+  const exact = LOCS.findIndex(l => l.name.toLowerCase() === t);
+  if (exact >= 0) return exact;
+  const order = LOCS.map((_, i) => i).sort((a, b) => (b === PERIL) - (a === PERIL));
+  for (const i of order) {
+    for (const k of LOCS[i].keys) {
+      if (new RegExp("\\b" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(t)) return i;
+    }
+  }
+  return ELSE;
+}
+
+function render() {
+  const groups = {};
+  FAMILY.forEach((m, i) => {
+    const li = state[m.name] ? state[m.name].loc : ELSE;
+    (groups[li] = groups[li] || []).push(i);
+    legendLoc[i].textContent = state[m.name] && state[m.name].text ? state[m.name].text : LOCS[li].name;
+    legendLoc[i].classList.toggle("peril", li === PERIL);
+  });
+  sectorEls.forEach((el, i) => el.classList.toggle("occ", !!groups[i]));
+  Object.keys(groups).forEach(key => {
+    const li = Number(key), arr = groups[key], n = arr.length;
+    const sp = n > 1 ? Math.min(9, 32 / (n - 1)) : 0;
+    arr.forEach((idx, k) => {
+      const h = hands[idx];
+      setA(h.rot, li * 36 + (k - (n - 1) / 2) * sp);
+      h.lab.style.transform = "rotate(" + (-h.rot._a) + "deg)";
+      h.g.classList.toggle("peril", li === PERIL);
+    });
+  });
+}
+
+/* ---------- Google Sheet sync ---------- */
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+const statusEl = document.getElementById("status");
+function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.classList.toggle("bad", !ok); }
+const hhmm = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+async function sync() {
+  try {
+    const url = SHEET_URL + (SHEET_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const rows = parseCSV(await r.text());
+    let n = 0;
+    rows.forEach(row => {
+      const nm = (row[0] || "").trim().toLowerCase();
+      const m = FAMILY.find(f => f.name.toLowerCase() === nm);
+      if (!m) return;
+      const text = (row[1] || "").trim();
+      state[m.name] = { text, loc: matchLoc(text) };
+      n++;
+    });
+    save(); render();
+    setStatus("Synced " + hhmm() + " (" + n + " of " + FAMILY.length + " found)", true);
+  } catch (e) {
+    setStatus("Sync failed, showing last known (" + e.message + ")", false);
+  }
+}
+
+/* ---------- demo mode ---------- */
+function demoStep() {
+  const m = FAMILY[Math.floor(Math.random() * FAMILY.length)];
+  const li = Math.floor(Math.random() * N);
+  state[m.name] = { text: LOCS[li].name, loc: li };
+  render();
+}
+
+/* ---------- time + tick ---------- */
+const hh = svg.querySelector(".hh"), hm = svg.querySelector(".hm"), hs = svg.querySelector(".hs");
+function tickTime() {
+  const d = new Date(), sec = d.getSeconds(), min = d.getMinutes(), hr = d.getHours() % 12;
+  setA(hs, sec * 6);
+  setA(hm, min * 6 + sec / 10);
+  setA(hh, hr * 30 + min / 2 + sec / 120);
+}
+
+let ac = null, soundOn = false, tock = false, lastSec = -1;
+function click() {
+  if (!soundOn || !ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = "square"; o.frequency.value = (tock = !tock) ? 900 : 700;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.1, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t); o.stop(t + 0.05);
+}
+const sndBtn = document.getElementById("snd");
+function toggleSound() {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === "suspended") ac.resume();
+  soundOn = !soundOn;
+  sndBtn.textContent = "Tick sound: " + (soundOn ? "on" : "off");
+}
+sndBtn.addEventListener("click", toggleSound);
+svg.querySelector("#crown").addEventListener("click", toggleSound);
+
+function toggleFS() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+}
+document.getElementById("fs").addEventListener("click", toggleFS);
+document.addEventListener("keydown", e => { if (e.key === "f" || e.key === "F") toggleFS(); });
+
+/* hide cursor when idle (kiosk) */
+let idleT;
+document.addEventListener("mousemove", () => {
+  document.body.classList.remove("idle");
+  clearTimeout(idleT);
+  idleT = setTimeout(() => document.body.classList.add("idle"), 4000);
+});
+
+/* keep the screen awake */
+async function wake() { try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+wake();
+
+/* ---------- start ---------- */
+FAMILY.forEach(m => { if (!state[m.name]) state[m.name] = { text: "", loc: ELSE }; });
+render();
+tickTime();
+requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("ready")));
+
+setInterval(() => {
+  const sec = new Date().getSeconds();
+  if (sec !== lastSec) { lastSec = sec; tickTime(); click(); }
+}, 100);
+
+if (SHEET_URL && !FORCE_DEMO) {
+  sync();
+  setInterval(sync, CONFIG.REFRESH_SECONDS * 1000);
+} else {
+  setStatus("DEMO mode: add a sheet link in CONFIG", true);
+  FAMILY.forEach((m, i) => { const li = Math.floor(Math.random() * N); state[m.name] = { text: LOCS[li].name, loc: li }; });
+  render();
+  setInterval(demoStep, 7000);
+}
+</script>
+</body>
+</html>
