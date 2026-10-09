@@ -83,7 +83,7 @@ button:hover{background:rgba(217,178,95,.3)}
    Anything unrecognised lands on "Elsewhere".
    ===================================================================== */
 const CONFIG = {
-  SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/edit?usp=sharing",
+  SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/gviz/tq?tqx=out:csv&gid=0",
   REFRESH_SECONDS: 30,
   FAMILY: [
     { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a" },
@@ -118,23 +118,27 @@ const params = new URLSearchParams(location.search);
    It is saved on that device and removed from the address bar, so the public
    page source never holds it. Use ?sheet=clear to forget it. */
 function readSheetParam() {
-  const q = location.search.replace(/^\?/, "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/edit?usp=sharing");
-  const i = q.indexOf("sheet=");
-  if (i < 0) return null;
-  let v = q.slice(i + 6);
-  try { if (/^https?%3A/i.test(v)) v = decodeURIComponent(v); } catch (e) {}
-  return v;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("sheet");
 }
 let SHEET_URL = CONFIG.SHEET_CSV_URL;
 {
   const p = readSheetParam();
   try {
-    if (p === "clear") localStorage.removeItem("family-clock-sheet");
-    else if (p) localStorage.setItem("family-clock-sheet", p);
+    if (p === "clear") {
+      localStorage.removeItem("family-clock-sheet");
+      SHEET_URL = CONFIG.SHEET_CSV_URL;
+    } else if (p) {
+      localStorage.setItem("family-clock-sheet", p);
+      SHEET_URL = p;
+    } else {
+      // The configured URL is the default. A saved override is used only if one exists.
+      SHEET_URL = localStorage.getItem("family-clock-sheet") || CONFIG.SHEET_CSV_URL;
+    }
     if (p) history.replaceState(null, "", location.pathname);
-    SHEET_URL = localStorage.getItem("family-clock-sheet") || CONFIG.SHEET_CSV_URL;
   } catch (e) {
     if (p && p !== "clear") SHEET_URL = p;
+    else SHEET_URL = CONFIG.SHEET_CSV_URL;
   }
 }
 const FORCE_DEMO = params.has("demo");
@@ -337,7 +341,12 @@ async function sync() {
     const url = SHEET_URL + (SHEET_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    const rows = parseCSV(await r.text());
+    const responseText = await r.text();
+    if (/^\\s*<!doctype html|^\\s*<html/i.test(responseText)) {
+      throw new Error("Google returned HTML, not CSV. Check sheet access and the tab URL.");
+    }
+    const rows = parseCSV(responseText);
+    if (!rows.length) throw new Error("The sheet returned no rows.");
     let n = 0;
     rows.forEach(row => {
       const nm = (row[0] || "").trim().toLowerCase();
