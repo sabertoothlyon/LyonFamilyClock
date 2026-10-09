@@ -118,7 +118,7 @@ const params = new URLSearchParams(location.search);
    It is saved on that device and removed from the address bar, so the public
    page source never holds it. Use ?sheet=clear to forget it. */
 function readSheetParam() {
-  const q = location.search.replace(/^\?/, "");
+  const q = location.search.replace(/^\?/, "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/edit?usp=sharing");
   const i = q.indexOf("sheet=");
   if (i < 0) return null;
   let v = q.slice(i + 6);
