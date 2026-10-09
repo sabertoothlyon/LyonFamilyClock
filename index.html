@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lyon Family Clock">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23b98a35'/%3E%3Ccircle cx='32' cy='32' r='25' fill='%232a170b'/%3E%3Cpath d='M32 32 L32 12 M32 32 L46 40' stroke='%23f3d890' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23b98a35'/%3E%3Ccircle cx='32' cy='32' r='25' fill='%238d5d1e'/%3E%3Cpath d='M32 10l4 10 10 4-10 4-4 10-4-10-10-4 10-4z' fill='%23f4e8c8'/%3E%3C/svg%3E">
 <title>Family Clock</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 30%,#2b1a0e,#0d0704 75%);color:var(--ink);font-family:Cinzel,"Palatino Linotype",Palatino,Georgia,serif;overflow:hidden}
 body.idle{cursor:none}
-.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:2vmin;height:100vh;height:100dvh;padding:calc(1.5vmin + env(safe-area-inset-top)) calc(1.5vmin + env(safe-area-inset-right)) calc(1.5vmin + env(safe-area-inset-bottom)) calc(1.5vmin + env(safe-area-inset-left));align-items:center}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:2vmin;height:100vh;height:100dvh;padding:calc(1.5vmin + env(safe-area-inset-top)) calc(1.5vmin + env(safe-area-inset-right)) calc(1.5vmin + env(safe-area-inset-bottom)) calc(1.5vmin + env(safe-area-inset-left));}
 #clock{width:100%;height:100%;max-height:97vh;display:block}
 .legend{background:rgba(20,10,5,.55);border:1px solid var(--gold-d);border-radius:14px;padding:14px 16px}
 .legend h1{margin:0 0 10px;font-size:1.05rem;letter-spacing:.12em;color:var(--gold);text-align:center;text-transform:uppercase}
@@ -85,6 +85,7 @@ button:hover{background:rgba(217,178,95,.3)}
 const CONFIG = {
   SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/gviz/tq?tqx=out:csv&gid=0",
   REFRESH_SECONDS: 30,
+  TIMEZONE: "America/Anchorage",
   FAMILY: [
     { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a" },
     { name: "Stacey",  role: "Mom", short: "S",  color: "#f2a33a" },
@@ -105,7 +106,7 @@ const CONFIG = {
     { name: "Traveling",    keys: ["travel", "driving", "commut", "flight", "airport", "road", "bus", "train", "on the way"] },
     { name: "Gym",          keys: ["gym", "workout", "run", "surf", "hike", "beach", "sport", "swim"] },
     { name: "Church",       keys: ["church", "temple", "service", "prayer"] },
-    { name: "Shopping",     keys: ["shop", "store", "market", "errand", "grocer", "mall"] },
+    { name: "Shopping",     keys: ["shop", "store", "market", "errerrand", "grocer", "mall"] },
     { name: "Visiting",     keys: ["visit", "friend", "party", "dinner", "grandma", "grandpa", "cousin"] },
     { name: "Elsewhere",    keys: [] },
     { name: "Mortal Peril", keys: ["peril", "danger", "emergency", "sos", "hospital", "help"] }
@@ -334,7 +335,27 @@ function parseCSV(text) {
 }
 const statusEl = document.getElementById("status");
 function setStatus(msg, ok) { statusEl.textContent = msg; statusEl.classList.toggle("bad", !ok); }
-const hhmm = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+function getTimePartsForZone(timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+  const parts = formatter.formatToParts(new Date());
+  const values = {};
+  for (const part of parts) {
+    if (part.type !== "literal") values[part.type] = Number(part.value);
+  }
+  return {
+    sec: values.second || 0,
+    min: values.minute || 0,
+    hr: (values.hour || 0) % 12
+  };
+}
+const hhmm = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: CONFIG.TIMEZONE });
 
 async function sync() {
   try {
@@ -342,7 +363,7 @@ async function sync() {
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const responseText = await r.text();
-    if (/^\\s*<!doctype html|^\\s*<html/i.test(responseText)) {
+    if (/^\s*<!doctype html|^\s*<html/i.test(responseText)) {
       throw new Error("Google returned HTML, not CSV. Check sheet access and the tab URL.");
     }
     const rows = parseCSV(responseText);
@@ -374,7 +395,7 @@ function demoStep() {
 /* ---------- time + tick ---------- */
 const hh = svg.querySelector(".hh"), hm = svg.querySelector(".hm"), hs = svg.querySelector(".hs");
 function tickTime() {
-  const d = new Date(), sec = d.getSeconds(), min = d.getMinutes(), hr = d.getHours() % 12;
+  const { sec, min, hr } = getTimePartsForZone(CONFIG.TIMEZONE);
   setA(hs, sec * 6);
   setA(hm, min * 6 + sec / 10);
   setA(hh, hr * 30 + min / 2 + sec / 120);
@@ -428,7 +449,7 @@ tickTime();
 requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("ready")));
 
 setInterval(() => {
-  const sec = new Date().getSeconds();
+  const sec = getTimePartsForZone(CONFIG.TIMEZONE).sec;
   if (sec !== lastSec) { lastSec = sec; tickTime(); click(); }
 }, 100);
 
