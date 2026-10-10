@@ -19,7 +19,7 @@ html,body{margin:0;height:100%;background:radial-gradient(ellipse at 50% 30%,#2b
 body.idle{cursor:none}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:2vmin;height:100vh;height:100dvh;padding:calc(1.5vmin + env(safe-area-inset-top)) calc(1.5vmin + env(safe-area-inset-right)) calc(1.5vmin + env(safe-area-inset-bottom)) calc(1.5vmin + env(safe-area-inset-left));}
 #clock{width:100%;height:100%;max-height:97vh;display:block}
-.legend{background:rgba(20,10,5,.55);border:1px solid var(--gold-d);border-radius:14px;padding:14px 16px}
+.legend{max-height:100%;overflow-y:auto;background:rgba(20,10,5,.55);border:1px solid var(--gold-d);border-radius:14px;padding:14px 16px}
 .legend h1{margin:0 0 10px;font-size:1.05rem;letter-spacing:.12em;color:var(--gold);text-align:center;text-transform:uppercase}
 .legend ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .legend li{display:grid;grid-template-columns:14px 1fr;gap:0 10px;align-items:center}
@@ -80,36 +80,34 @@ button:hover{background:rgba(217,178,95,.3)}
    3. Paste the CSV link into SHEET_CSV_URL (or open this page with ?sheet=LINK).
    Leave SHEET_CSV_URL empty to run in DEMO mode (hands wander on their own).
    Location text is matched against LOCATIONS names first, then keywords.
-   Anything unrecognised lands on "Elsewhere".
+   Anything unrecognised lands on "Lost".
    ===================================================================== */
 const CONFIG = {
   SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/16i1e7R5Lz4QdOL_6b6mp6aMhNCf0AOkIjXS2QCOkKdc/gviz/tq?tqx=out:csv&gid=0",
   REFRESH_SECONDS: 30,
   TIMEZONE: "America/Anchorage",
   FAMILY: [
-    { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a" },
-    { name: "Stacey",  role: "Mom", short: "S",  color: "#f2a33a" },
-    { name: "Andrew",  short: "A",  color: "#f6d55c" },
-    { name: "Heidi",   short: "Hd", color: "#8fd16a" },
-    { name: "Tanner",  short: "T",  color: "#4fc3b0" },
-    { name: "Brenden", short: "B",  color: "#5aa9f0" },
-    { name: "Heather", short: "Hr", color: "#8e7cf0" },
-    { name: "Heath",   short: "Ht", color: "#e27bd0" },
-    { name: "Jesse",   short: "Je", color: "#f0efe6" },
-    { name: "Rylee",   short: "R",  color: "#c9a27a" }
+    { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a", len: 210, photo: "" },
+    { name: "Stacey",  role: "Mom", short: "S",  color: "#f2a33a", len: 330, photo: "" },
+    { name: "Andrew",  short: "A",  color: "#f6d55c", len: 270, photo: "" },
+    { name: "Heidi",   short: "Hd", color: "#8fd16a", len: 350, photo: "" },
+    { name: "Tanner",  short: "T",  color: "#4fc3b0", len: 240, photo: "" },
+    { name: "Brenden", short: "B",  color: "#5aa9f0", len: 300, photo: "" },
+    { name: "Heather", short: "Hr", color: "#8e7cf0", len: 215, photo: "" },
+    { name: "Heath",   short: "Ht", color: "#e27bd0", len: 340, photo: "" },
+    { name: "Jesse",   short: "Je", color: "#f0efe6", len: 260, photo: "" },
+    { name: "Rylee",   short: "R",  color: "#c9a27a", len: 310, photo: "" }
   ],
-  /* Order = clockwise from the top. Exactly 10 sectors. */
+  /* Order = clockwise from the top. Any number of sectors. Unrecognised text lands on "Lost". */
   LOCATIONS: [
     { name: "Home",         keys: ["home", "house"] },
-    { name: "Work",         keys: ["work", "office", "job", "shift", "meeting"] },
     { name: "School",       keys: ["school", "class", "college", "campus", "practice", "lesson"] },
+    { name: "Work",         keys: ["work", "office", "job", "shift", "meeting"] },
     { name: "Traveling",    keys: ["travel", "driving", "commut", "flight", "airport", "road", "bus", "train", "on the way"] },
-    { name: "Gym",          keys: ["gym", "workout", "run", "surf", "hike", "beach", "sport", "swim"] },
-    { name: "Church",       keys: ["church", "temple", "service", "prayer"] },
-    { name: "Shopping",     keys: ["shop", "store", "market", "errerrand", "grocer", "mall"] },
-    { name: "Visiting",     keys: ["visit", "friend", "party", "dinner", "grandma", "grandpa", "cousin"] },
-    { name: "Elsewhere",    keys: [] },
-    { name: "Mortal Peril", keys: ["peril", "danger", "emergency", "sos", "hospital", "help"] }
+    { name: "Lost",         keys: ["lost", "missing"] },
+    { name: "Hospital",     keys: ["hospital", "clinic", "doctor", "dentist", "urgent care", "surgery"] },
+    { name: "Prison",       keys: ["prison", "jail", "arrest", "detention"] },
+    { name: "Mortal Peril", keys: ["peril", "danger", "emergency", "sos", "help"] }
   ]
 };
 
@@ -144,8 +142,9 @@ let SHEET_URL = CONFIG.SHEET_CSV_URL;
 }
 const FORCE_DEMO = params.has("demo");
 const FAMILY = CONFIG.FAMILY, LOCS = CONFIG.LOCATIONS, N = LOCS.length;
-const ELSE = LOCS.findIndex(l => l.name === "Elsewhere");
+const ELSE = LOCS.findIndex(l => l.name === "Lost");
 const PERIL = LOCS.findIndex(l => l.name === "Mortal Peril");
+const STEP = 360 / N;
 const SVGNS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById("clock");
 
@@ -225,7 +224,7 @@ for (let i = 0; i < 60; i++) {
 /* sectors */
 const sectorEls = [];
 LOCS.forEach((loc, i) => {
-  const a = i * 36, a0 = a - 18, a1 = a + 18;
+  const a = i * STEP, a0 = a - STEP / 2, a1 = a + STEP / 2;
   const [x0, y0] = pol(366, a0), [x1, y1] = pol(366, a1), [x2, y2] = pol(282, a1), [x3, y3] = pol(282, a0);
   const g = s("g", { class: "sct" + (i % 2 ? " alt" : "") }, gSectors);
   s("path", { d: `M${x0},${y0} A366,366 0 0 1 ${x1},${y1} L${x2},${y2} A282,282 0 0 0 ${x3},${y3} Z` }, g);
@@ -246,21 +245,66 @@ for (let i = 0; i < 38; i++) {
   c.style.animationDelay = (rnd() * 3.5) + "s";
 }
 
-/* family hands */
+/* family hands: gold blade, name cut out as negative space, photo circle at the tip */
+const PHOTO_KEY = "family-clock-photos";
+let photos = {};
+try { photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || "{}"); } catch (e) {}
 const hands = FAMILY.map((m, i) => {
-  const L = 150 + i * 13;
+  const tl = m.name.length * 16;
+  const L = Math.max(m.len || (200 + (i * 53) % 150), 90 + tl), c = L - 34;
   const g = s("g", {}, gHands);
   const rot = s("g", { class: "mrot" }, g);
   const shk = s("g", { class: "shk" }, rot);
-  s("line", { x1: 0, y1: 26, x2: 0, y2: -(L - 24), stroke: "#120a05", "stroke-width": 9, "stroke-linecap": "round" }, shk);
-  s("line", { x1: 0, y1: 26, x2: 0, y2: -(L - 24), stroke: m.color, "stroke-width": 4.5, "stroke-linecap": "round" }, shk);
-  s("polygon", { points: `0,${-L} -13,${-(L - 34)} 13,${-(L - 34)}`, fill: m.color, stroke: "#120a05", "stroke-width": 2, "stroke-linejoin": "round" }, shk);
-  const lp = s("g", { transform: `translate(0,${-(L - 64)})` }, shk);
-  const lab = s("g", { class: "mrot" }, lp);
-  s("circle", { r: 18, fill: m.color, stroke: "#d9b25f", "stroke-width": 2.2 }, lab);
-  const t = s("text", { "text-anchor": "middle", "dominant-baseline": "central", fill: "#1a0f08", "font-size": (m.short || m.name[0]).length > 1 ? 14 : 18, "font-weight": 700, "font-family": "Cinzel, Georgia, serif" }, lab);
-  t.textContent = m.short || m.name[0];
-  return { g, rot, lab };
+  const defs = s("defs", {}, shk);
+  const mk = s("mask", { id: "mk" + i, maskUnits: "userSpaceOnUse", x: -60, y: -400, width: 120, height: 460 }, defs);
+  s("rect", { x: -60, y: -400, width: 120, height: 460, fill: "#fff" }, mk);
+  const mt = s("text", { transform: "translate(0,-46) rotate(-90)", x: 0, y: 7, fill: "#000", "font-size": 21, "font-weight": 700, "font-family": "Cinzel, Georgia, serif", textLength: tl, lengthAdjust: "spacing" }, mk);
+  mt.textContent = m.name.toUpperCase();
+  const cp = s("clipPath", { id: "cp" + i }, defs);
+  s("circle", { r: 26 }, cp);
+  s("path", { d: `M-9,38 L-15,${-c} L15,${-c} L9,38 Z`, fill: "url(#gold)", stroke: "#120a05", "stroke-width": 2, "stroke-linejoin": "round", mask: `url(#mk${i})` }, shk);
+  const lp = s("g", { transform: `translate(0,${-c})` }, shk);
+  const lab = s("g", { class: "mrot", style: "cursor:pointer" }, lp);
+  s("circle", { r: 34, fill: "url(#gold)", stroke: "#120a05", "stroke-width": 2.2 }, lab);
+  s("circle", { r: 28.5, fill: "none", stroke: m.color, "stroke-width": 3 }, lab);
+  s("circle", { r: 26, fill: "#2a170b" }, lab);
+  const pg = s("g", { "clip-path": `url(#cp${i})` }, lab);
+  s("circle", { cx: 0, cy: -6, r: 8.5, fill: "#8a6a2c" }, pg);
+  s("ellipse", { cx: 0, cy: 19, rx: 15, ry: 12, fill: "#8a6a2c" }, pg);
+  const img = s("image", { x: -26, y: -26, width: 52, height: 52, preserveAspectRatio: "xMidYMid slice" }, pg);
+  img.style.display = "none";
+  s("circle", { r: 26, fill: "none", stroke: "#120a05", "stroke-width": 1.5 }, lab);
+  /* photo order: one picked on this device, then CONFIG photo, then Name.jpg in the same folder */
+  img.addEventListener("error", () => { img.style.display = "none"; });
+  img.setAttribute("href", photos[m.name] || m.photo || (m.name + ".jpg"));
+  img.style.display = "";
+  lab.addEventListener("click", () => pickPhoto(i));
+  return { g, rot, lab, img };
+});
+
+/* click a circle to set that person's photo (stored on this device) */
+const picker = document.createElement("input");
+picker.type = "file"; picker.accept = "image/*"; picker.style.display = "none";
+document.body.appendChild(picker);
+let pickIdx = -1;
+function pickPhoto(i) { pickIdx = i; picker.value = ""; picker.click(); }
+picker.addEventListener("change", () => {
+  const f = picker.files[0]; if (!f || pickIdx < 0) return;
+  const i = pickIdx, fr = new FileReader();
+  fr.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement("canvas"); cv.width = cv.height = 160;
+      const k = Math.min(im.width, im.height);
+      cv.getContext("2d").drawImage(im, (im.width - k) / 2, (im.height - k) / 2, k, k, 0, 0, 160, 160);
+      const d = cv.toDataURL("image/jpeg", 0.85);
+      photos[FAMILY[i].name] = d;
+      try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photos)); } catch (e) {}
+      hands[i].img.setAttribute("href", d); hands[i].img.style.display = "";
+    };
+    im.src = fr.result;
+  };
+  fr.readAsDataURL(f);
 });
 
 /* legend */
@@ -304,10 +348,10 @@ function render() {
   sectorEls.forEach((el, i) => el.classList.toggle("occ", !!groups[i]));
   Object.keys(groups).forEach(key => {
     const li = Number(key), arr = groups[key], n = arr.length;
-    const sp = n > 1 ? Math.min(9, 32 / (n - 1)) : 0;
+    const sp = n > 1 ? Math.min(9, STEP * 0.9 / (n - 1)) : 0;
     arr.forEach((idx, k) => {
       const h = hands[idx];
-      setA(h.rot, li * 36 + (k - (n - 1) / 2) * sp);
+      setA(h.rot, li * STEP + (k - (n - 1) / 2) * sp);
       h.lab.style.transform = "rotate(" + (-h.rot._a) + "deg)";
       h.g.classList.toggle("peril", li === PERIL);
     });
