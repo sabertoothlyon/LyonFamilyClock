@@ -32,7 +32,7 @@ body.idle{cursor:none}
 #status.bad{color:#ffb15c}
 button{font:inherit;font-size:.7rem;color:var(--ink);background:rgba(217,178,95,.15);border:1px solid var(--gold-d);border-radius:8px;padding:5px 10px;cursor:pointer}
 button:hover{background:rgba(217,178,95,.3)}
-.sl{fill:#e9d49b;font-size:21px;letter-spacing:.06em;font-family:inherit}
+.sl{fill:#e9d49b;font-size:15px;letter-spacing:.03em;font-family:inherit}
 .sl.pl{fill:#ff8a7e}
 .sct path{fill:rgba(217,178,95,.12);stroke:#8a6a2c;stroke-width:1.5;transition:fill .6s}
 .sct.alt path{fill:rgba(217,178,95,.2)}
@@ -100,14 +100,24 @@ const CONFIG = {
   ],
   /* Order = clockwise from the top. Any number of sectors. Unrecognised text lands on "Lost". */
   LOCATIONS: [
-    { name: "Home",         keys: ["home", "house"] },
-    { name: "School",       keys: ["school", "class", "college", "campus", "practice", "lesson"] },
-    { name: "Work",         keys: ["work", "office", "job", "shift", "meeting"] },
-    { name: "Traveling",    keys: ["travel", "driving", "commut", "flight", "airport", "road", "bus", "train", "on the way"] },
-    { name: "Lost",         keys: ["lost", "missing"] },
-    { name: "Hospital",     keys: ["hospital", "clinic", "doctor", "dentist", "urgent care", "surgery"] },
-    { name: "Prison",       keys: ["prison", "jail", "arrest", "detention"] },
-    { name: "Mortal Peril", keys: ["peril", "danger", "emergency", "sos", "help"] }
+    { name: "The Burrow",        keys: ["burrow", "home", "house"] },
+    { name: "Child's Home",      pri: 1, keys: ["child's home", "child\u2019s home", "childs home", "child's house", "child\u2019s house", "kid's house", "kids house", "kids home"] },
+    { name: "Work",              keys: ["work", "office", "job", "shift", "meeting"] },
+    { name: "School",            keys: ["school", "class", "college", "campus", "practice", "lesson"] },
+    { name: "Horse Stables",     keys: ["horse", "stable", "barn", "riding"] },
+    { name: "Isla Nublar",       keys: ["isla", "nublar", "jurassic", "dinosaur"] },
+    { name: "Garden",            keys: ["garden", "yard", "greenhouse"] },
+    { name: "Quidditch",         keys: ["quidditch", "broom", "snitch"] },
+    { name: "Travelling",        keys: ["travel", "driving", "commut", "flight", "airport", "road", "bus", "train", "on the way"] },
+    { name: "Lost",              keys: ["lost", "missing"] },
+    { name: "Holiday",           keys: ["holiday", "vacation", "trip", "cruise", "resort", "camping"] },
+    { name: "Dentist / Medical", keys: ["dentist", "doctor", "medical", "clinic", "appointment", "checkup", "urgent care"] },
+    { name: "The Pub",           keys: ["the pub", "pub ", "tavern", "brewery", "happy hour"] },
+    { name: "Shopping",          keys: ["shop", "store", "mall", "grocery", "market", "costco", "walmart"] },
+    { name: "Mortal Peril",      pri: 2, keys: ["peril", "danger", "emergency", "sos", "help"] },
+    { name: "Prison",            keys: ["prison", "jail", "arrest", "detention"] },
+    { name: "Hospital",          keys: ["hospital", "surgery", "ambulance", "maternity"] },
+    { name: "In Hiding",         keys: ["hiding", "hide", "hidden", "undercover", "laying low"] }
   ]
 };
 
@@ -222,6 +232,17 @@ for (let i = 0; i < 60; i++) {
 });
 
 /* sectors */
+function labelLines(name) {
+  if (name.includes(" / ")) { const p = name.split(" / "); return [p[0] + " /", p[1]]; }
+  const w = name.split(" ");
+  if (name.length <= 9 || w.length < 2) return [name];
+  let best = 1, gap = 1e9;
+  for (let i = 1; i < w.length; i++) {
+    const d = Math.abs(w.slice(0, i).join(" ").length - w.slice(i).join(" ").length);
+    if (d < gap) { gap = d; best = i; }
+  }
+  return [w.slice(0, best).join(" "), w.slice(best).join(" ")];
+}
 const sectorEls = [];
 LOCS.forEach((loc, i) => {
   const a = i * STEP, a0 = a - STEP / 2, a1 = a + STEP / 2;
@@ -232,7 +253,11 @@ LOCS.forEach((loc, i) => {
   const flip = a > 90 && a < 270;
   const lg = s("g", { transform: `translate(${lx},${ly}) rotate(${flip ? a + 180 : a})` }, g);
   const t = s("text", { class: "sl" + (i === PERIL ? " pl" : ""), "text-anchor": "middle", "dominant-baseline": "central" }, lg);
-  t.textContent = loc.name;
+  const parts = labelLines(loc.name);
+  parts.forEach((ln, k) => {
+    const ts = s("tspan", { x: 0, y: parts.length > 1 ? (k ? 8.5 : -8.5) : 0 }, t);
+    ts.textContent = ln;
+  });
   sectorEls.push(g);
 });
 
@@ -327,7 +352,7 @@ function matchLoc(text) {
   if (!t) return ELSE;
   const exact = LOCS.findIndex(l => l.name.toLowerCase() === t);
   if (exact >= 0) return exact;
-  const order = LOCS.map((_, i) => i).sort((a, b) => (b === PERIL) - (a === PERIL));
+  const order = LOCS.map((_, i) => i).sort((a, b) => (LOCS[b].pri || 0) - (LOCS[a].pri || 0));
   for (const i of order) {
     for (const k of LOCS[i].keys) {
       if (new RegExp("\\b" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(t)) return i;
@@ -492,7 +517,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) wake
 wake();
 
 /* ---------- start ---------- */
-FAMILY.forEach(m => { if (!state[m.name]) state[m.name] = { text: "", loc: ELSE }; });
+FAMILY.forEach(m => { const st = state[m.name]; state[m.name] = st ? { text: st.text || "", loc: matchLoc(st.text) } : { text: "", loc: ELSE }; });
 render();
 tickTime();
 requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("ready")));
