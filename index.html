@@ -279,7 +279,7 @@ const hands = FAMILY.map((m, i) => {
   img.setAttribute("href", photos[m.name] || m.photo || (m.name + ".jpg"));
   img.style.display = "";
   lab.addEventListener("click", () => pickPhoto(i));
-  return { g, rot, lab, img };
+  return { g, rot, lab, img, mt, tl };
 });
 
 /* click a circle to set that person's photo (stored on this device) */
@@ -353,6 +353,9 @@ function render() {
       const h = hands[idx];
       setA(h.rot, li * STEP + (k - (n - 1) / 2) * sp);
       h.lab.style.transform = "rotate(" + (-h.rot._a) + "deg)";
+      /* names on the left half flip so they always read upright */
+      const ang = ((h.rot._a % 360) + 360) % 360;
+      h.mt.setAttribute("transform", ang > 180 ? `translate(0,${-(46 + h.tl)}) rotate(90)` : "translate(0,-46) rotate(-90)");
       h.g.classList.toggle("peril", li === PERIL);
     });
   });
@@ -419,6 +422,9 @@ async function sync() {
       if (!m) return;
       const text = (row[1] || "").trim();
       state[m.name] = { text, loc: matchLoc(text) };
+      /* optional column C: photo file name or full image URL (a picked photo on this device still wins) */
+      const ph = (row[2] || "").trim(), hd = hands[FAMILY.indexOf(m)];
+      if (ph && !photos[m.name] && hd.img.getAttribute("href") !== ph) { hd.img.setAttribute("href", ph); hd.img.style.display = ""; }
       n++;
     });
     save(); render();
