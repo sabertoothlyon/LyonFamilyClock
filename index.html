@@ -90,10 +90,10 @@ const CONFIG = {
     { name: "Joe",     role: "Dad", short: "J",  color: "#e8564a", len: 210, photo: "" },
     { name: "Stacey",  role: "Mom", short: "S",  color: "#f2a33a", len: 330, photo: "" },
     { name: "Andrew",  short: "A",  color: "#f6d55c", len: 270, photo: "" },
-    { name: "Heidi",   short: "Hd", color: "#8fd16a", len: 350, photo: "" },
+    { name: "Heidi", spouse: "Josh",   short: "Hd", color: "#8fd16a", len: 320, photo: "" },
     { name: "Tanner",  short: "T",  color: "#4fc3b0", len: 240, photo: "" },
-    { name: "Brenden", short: "B",  color: "#5aa9f0", len: 300, photo: "" },
-    { name: "Heather", short: "Hr", color: "#8e7cf0", len: 215, photo: "" },
+    { name: "Brenden", spouse: "Jovita", short: "B",  color: "#5aa9f0", len: 335, photo: "" },
+    { name: "Heather", spouse: "Parley", short: "Hr", color: "#8e7cf0", len: 355, photo: "" },
     { name: "Heath",   short: "Ht", color: "#e27bd0", len: 340, photo: "" },
     { name: "Jesse",   short: "Je", color: "#f0efe6", len: 260, photo: "" },
     { name: "Rylee",   short: "R",  color: "#c9a27a", len: 310, photo: "" }
@@ -250,19 +250,18 @@ const PHOTO_KEY = "family-clock-photos";
 let photos = {};
 try { photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || "{}"); } catch (e) {}
 const hands = FAMILY.map((m, i) => {
-  const tl = m.name.length * 16;
-  const L = Math.max(m.len || (200 + (i * 53) % 150), 90 + tl), c = L - 34;
+  const label = (m.spouse ? m.name + " & " + m.spouse : m.name).toUpperCase();
+  const fs = label.length > 10 ? 19 : 21, tl = Math.round(label.length * fs * 0.76);
+  const L = Math.max(m.len || (200 + (i * 53) % 150), 96 + tl), c = L - 34;
   const g = s("g", {}, gHands);
   const rot = s("g", { class: "mrot" }, g);
   const shk = s("g", { class: "shk" }, rot);
   const defs = s("defs", {}, shk);
-  const mk = s("mask", { id: "mk" + i, maskUnits: "userSpaceOnUse", x: -60, y: -400, width: 120, height: 460 }, defs);
-  s("rect", { x: -60, y: -400, width: 120, height: 460, fill: "#fff" }, mk);
-  const mt = s("text", { transform: "translate(0,-46) rotate(-90)", x: 0, y: 7, fill: "#000", "font-size": 21, "font-weight": 700, "font-family": "Cinzel, Georgia, serif", textLength: tl, lengthAdjust: "spacing" }, mk);
-  mt.textContent = m.name.toUpperCase();
   const cp = s("clipPath", { id: "cp" + i }, defs);
   s("circle", { r: 26 }, cp);
-  s("path", { d: `M-9,38 L-15,${-c} L15,${-c} L9,38 Z`, fill: "url(#gold)", stroke: "#120a05", "stroke-width": 2, "stroke-linejoin": "round", mask: `url(#mk${i})` }, shk);
+  s("path", { d: `M-9,38 L-15,${-c} L15,${-c} L9,38 Z`, fill: "url(#gold)", stroke: "#120a05", "stroke-width": 2, "stroke-linejoin": "round" }, shk);
+  const mt = s("text", { transform: "translate(0,-46) rotate(-90)", x: 0, y: fs * 0.33, fill: "#2a170b", "font-size": fs, "font-weight": 700, "font-family": "Cinzel, Georgia, serif", textLength: tl, lengthAdjust: "spacing" }, shk);
+  mt.textContent = label;
   const lp = s("g", { transform: `translate(0,${-c})` }, shk);
   const lab = s("g", { class: "mrot", style: "cursor:pointer" }, lp);
   s("circle", { r: 34, fill: "url(#gold)", stroke: "#120a05", "stroke-width": 2.2 }, lab);
@@ -313,7 +312,7 @@ const legendLoc = FAMILY.map(m => {
   const li = document.createElement("li");
   li.innerHTML = '<span class="sw"></span><span class="nm"></span><span class="lc"></span>';
   li.querySelector(".sw").style.background = m.color;
-  li.querySelector(".nm").textContent = m.name + (m.role ? " (" + m.role + ")" : "");
+  li.querySelector(".nm").textContent = (m.spouse ? m.name + " & " + m.spouse : m.name) + (m.role ? " (" + m.role + ")" : "");
   legend.appendChild(li);
   return li.querySelector(".lc");
 });
